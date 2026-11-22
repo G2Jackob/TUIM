@@ -40,6 +40,10 @@ fun LoginScreen(viewModel: TuimViewModel, onLoggedIn: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("TUIM - Logowanie")
+        Text(
+            "Tryb testowy: demo / demo",
+            modifier = Modifier.padding(top = 8.dp)
+        )
         OutlinedTextField(
             value = username,
             onValueChange = { username = it },

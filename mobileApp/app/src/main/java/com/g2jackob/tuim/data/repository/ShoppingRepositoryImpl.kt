@@ -26,6 +26,41 @@ class ShoppingRepositoryImpl(
     override fun isLoggedIn(): Boolean = !tokenStore.accessTokenSnapshot().isNullOrBlank()
 
     override suspend fun login(username: String, password: String): Result<Unit> = runCatching {
+        if (username.trim().equals("demo", ignoreCase = true) && password == "demo") {
+            tokenStore.save("demo-access-token", "demo-refresh-token")
+            dao.upsertLists(
+                listOf(
+                    ShoppingListEntity(
+                        id = "demo-list",
+                        name = "Zakupy na weekend",
+                        description = "Lista demonstracyjna",
+                        currency = "PLN"
+                    )
+                )
+            )
+            dao.upsertItems(
+                listOf(
+                    ShoppingItemEntity(
+                        id = "demo-milk",
+                        listId = "demo-list",
+                        name = "Mleko",
+                        quantity = 2.0,
+                        unit = "l",
+                        category = "Napoje"
+                    ),
+                    ShoppingItemEntity(
+                        id = "demo-bread",
+                        listId = "demo-list",
+                        name = "Chleb",
+                        quantity = 1.0,
+                        unit = "szt.",
+                        category = "Pieczywo"
+                    )
+                )
+            )
+            return@runCatching
+        }
+
         val response = api.login(LoginRequest(username, password))
         val access = response.access()
         val refresh = response.refresh()
@@ -46,6 +81,9 @@ class ShoppingRepositoryImpl(
     }
 
     override suspend fun syncLists(): Result<Unit> = runCatching {
+        if (tokenStore.accessTokenSnapshot() == "demo-access-token") {
+            return@runCatching
+        }
         val remoteLists = api.getLists()
         dao.upsertLists(remoteLists.map {
             ShoppingListEntity(
@@ -59,6 +97,9 @@ class ShoppingRepositoryImpl(
     }
 
     override suspend fun syncList(listId: String): Result<Unit> = runCatching {
+        if (tokenStore.accessTokenSnapshot() == "demo-access-token") {
+            return@runCatching
+        }
         val remote = api.getList(listId)
         dao.upsertList(
             ShoppingListEntity(
@@ -89,6 +130,17 @@ class ShoppingRepositoryImpl(
         description: String,
         currency: String
     ): Result<Unit> = runCatching {
+        if (tokenStore.accessTokenSnapshot() == "demo-access-token") {
+            dao.upsertList(
+                ShoppingListEntity(
+                    id = "demo-${System.currentTimeMillis()}",
+                    name = name,
+                    description = description,
+                    currency = currency
+                )
+            )
+            return@runCatching
+        }
         val created = api.createList(ShoppingListRequest(name, description, currency))
         dao.upsertList(
             ShoppingListEntity(created.id, created.name, created.description.orEmpty(), created.currency ?: "PLN")
@@ -96,6 +148,10 @@ class ShoppingRepositoryImpl(
     }
 
     override suspend fun deleteList(listId: String): Result<Unit> = runCatching {
+        if (tokenStore.accessTokenSnapshot() == "demo-access-token") {
+            dao.deleteList(listId)
+            return@runCatching
+        }
         api.deleteList(listId)
         dao.deleteList(listId)
     }
@@ -109,6 +165,21 @@ class ShoppingRepositoryImpl(
         note: String,
         estimatedPrice: Double?
     ): Result<Unit> = runCatching {
+        if (tokenStore.accessTokenSnapshot() == "demo-access-token") {
+            dao.upsertItem(
+                ShoppingItemEntity(
+                    id = "demo-${System.currentTimeMillis()}",
+                    listId = listId,
+                    name = name,
+                    quantity = quantity,
+                    unit = unit,
+                    category = category,
+                    note = note,
+                    estimatedPrice = estimatedPrice
+                )
+            )
+            return@runCatching
+        }
         val created = api.createItem(
             listId,
             ShoppingItemRequest(name, quantity, unit, category, note, estimatedPrice)
@@ -134,6 +205,11 @@ class ShoppingRepositoryImpl(
         itemId: String,
         purchased: Boolean
     ): Result<Unit> = runCatching {
+        if (tokenStore.accessTokenSnapshot() == "demo-access-token") {
+            val item = requireNotNull(dao.getItem(itemId)) { "Produkt nie istnieje" }
+            dao.upsertItem(item.copy(purchased = purchased))
+            return@runCatching
+        }
         val updated = api.updateItem(listId, itemId, PurchasedRequest(purchased))
         dao.upsertItem(
             ShoppingItemEntity(
@@ -152,10 +228,27 @@ class ShoppingRepositoryImpl(
     }
 
     override suspend fun deleteItem(listId: String, itemId: String): Result<Unit> = runCatching {
+        if (tokenStore.accessTokenSnapshot() == "demo-access-token") {
+            dao.deleteItem(itemId)
+            return@runCatching
+        }
         api.deleteItem(listId, itemId)
         dao.deleteItem(itemId)
     }
 
     override suspend fun searchProducts(query: String): Result<List<ExternalProductDto>> =
-        runCatching { api.searchProducts(query).products.orEmpty() }
+        runCatching {
+            if (tokenStore.accessTokenSnapshot() == "demo-access-token") {
+                val normalized = query.trim().lowercase()
+                listOf(
+                    ExternalProductDto("Mleko", "Napoje"),
+                    ExternalProductDto("Chleb", "Pieczywo"),
+                    ExternalProductDto("Jabłko", "Owoce")
+                ).filter {
+                    normalized.isBlank() || it.name.lowercase().contains(normalized)
+                }
+            } else {
+                api.searchProducts(query).products.orEmpty()
+            }
+        }
 }

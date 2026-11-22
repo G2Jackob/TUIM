@@ -25,6 +25,9 @@ interface ShoppingDao {
     @Upsert
     suspend fun upsertItem(item: ShoppingItemEntity)
 
+    @Query("SELECT * FROM shopping_items WHERE id = :itemId")
+    suspend fun getItem(itemId: String): ShoppingItemEntity?
+
     @Query("DELETE FROM shopping_items WHERE id = :itemId")
     suspend fun deleteItem(itemId: String)
 
