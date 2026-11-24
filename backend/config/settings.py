@@ -120,3 +120,99 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+import os
+
+for _app in ("rest_framework", "channels", "drf_spectacular", "accounts", "shopping"):
+    if _app not in INSTALLED_APPS:
+        INSTALLED_APPS.append(_app)
+
+# --- konfiguracja z env (docker-compose) zamiast wartości na sztywno ze szkieletu
+SECRET_KEY = os.environ.get("SECRET_KEY", SECRET_KEY)
+DEBUG = os.environ.get("DEBUG", "1").lower() in ("1", "true", "yes")
+# bez tego emulator (Host: 10.0.2.2:8000) dostałby 400 DisallowedHost
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "*").split(",") if h.strip()]
+
+ROOT_URLCONF = "config.urls"
+ASGI_APPLICATION = "config.asgi.application"
+
+LANGUAGE_CODE = "pl"
+TIME_ZONE = "Europe/Warsaw"
+USE_I18N = True
+USE_TZ = True
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --- baza danych: PostgreSQL z env (docker-compose); bez POSTGRES_DB → lokalny SQLite
+if os.environ.get("POSTGRES_DB"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ["POSTGRES_DB"],
+            "USER": os.environ.get("POSTGRES_USER", "postgres"),
+            "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
+            "HOST": os.environ.get("POSTGRES_HOST", "postgres"),
+            "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+        }
+    }
+else:
+    DATABASES = {
+        "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}
+    }
+
+# --- Redis: warstwa kanałów (WebSockety) i cache (kursy walut)
+REDIS_URL = os.environ.get("REDIS_URL")
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [REDIS_URL]},
+        }
+    }
+    CACHES = {
+        "default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": REDIS_URL}
+    }
+else:
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
+# --- Django REST Framework
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": ["accounts.authentication.KeycloakJWTAuthentication"],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Shopping List API",
+    "DESCRIPTION": "Backend aplikacji do tworzenia i współdzielenia list zakupów.",
+    "VERSION": "0.1.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+}
+
+# --- Keycloak
+# KEYCLOAK_PUBLIC_URL   – adres Keycloaka WIDZIANY PRZEZ APLIKACJĘ (trafia do claimu `iss`;
+#                         dla emulatora Androida np. http://10.0.2.2:8080)
+# KEYCLOAK_INTERNAL_URL – adres, pod którym BACKEND pobiera klucze (w docker-compose: http://keycloak:8080)
+KEYCLOAK_PUBLIC_URL = os.environ.get("KEYCLOAK_PUBLIC_URL", "http://localhost:8080").rstrip("/")
+KEYCLOAK_INTERNAL_URL = os.environ.get("KEYCLOAK_INTERNAL_URL", "http://keycloak:8080").rstrip("/")
+KEYCLOAK_REALM = os.environ.get("KEYCLOAK_REALM", "shopping")
+KEYCLOAK_ISSUER = os.environ.get("KEYCLOAK_ISSUER", f"{KEYCLOAK_PUBLIC_URL}/realms/{KEYCLOAK_REALM}")
+KEYCLOAK_JWKS_URL = os.environ.get(
+    "KEYCLOAK_JWKS_URL",
+    f"{KEYCLOAK_INTERNAL_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs",
+)
+KEYCLOAK_MOBILE_CLIENT_ID = os.environ.get("KEYCLOAK_MOBILE_CLIENT_ID", "shopping-mobile")
+# Dozwoleni klienci (claim `azp`); pusta lista = bez sprawdzania
+KEYCLOAK_ALLOWED_CLIENTS = [
+    c.strip()
+    for c in os.environ.get("KEYCLOAK_ALLOWED_CLIENTS", KEYCLOAK_MOBILE_CLIENT_ID).split(",")
+    if c.strip()
+]
+KEYCLOAK_ALGORITHMS = ["RS256"]
+KEYCLOAK_LEEWAY_SECONDS = 10
+
+# --- zewnętrzne API kursów walut (NBP) i zaproszenia
+EXCHANGE_API_BASE_URL = os.environ.get("EXCHANGE_API_BASE_URL", "https://api.nbp.pl/api")
+EXCHANGE_API_TIMEOUT = float(os.environ.get("EXCHANGE_API_TIMEOUT", "5"))
+EXCHANGE_RATE_CACHE_TTL = int(os.environ.get("EXCHANGE_RATE_CACHE_TTL", "3600"))
+INVITE_TTL_HOURS = int(os.environ.get("INVITE_TTL_HOURS", "48"))
