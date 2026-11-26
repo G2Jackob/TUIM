@@ -4,8 +4,11 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+.ruff_cache/  
 .mypy_cache/
 .coverage
+.coverage.*  
+coverage.xml
 htmlcov/
 *.egg-info/
 
@@ -21,6 +24,7 @@ env/
 
 # Django
 backend/db.sqlite3
+*.sqlite3
 backend/staticfiles/
 backend/media/
 backend/*.log
@@ -35,3 +39,4 @@ docker-compose.override.yml
 .DS_Store
 Thumbs.db
 desktop.ini
+
