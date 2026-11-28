@@ -20,8 +20,6 @@ services:
       KEYCLOAK_PUBLIC_URL: "${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}"
       KEYCLOAK_INTERNAL_URL: "${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080}"
       KEYCLOAK_REALM: "${KEYCLOAK_REALM:-shopping}"
-    volumes:
-      - ./backend:/app
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,14 +1,9 @@
 # Backend – Shopping List (Django + DRF + Channels + Keycloak)
 
-## Jak wdrożyć w repo (4 kroki)
-1. Skopiuj do `backend/`: foldery `accounts/`, `shopping/`, pliki `config/urls.py`, `config/asgi.py` (nadpisz),
-   `conftest.py`, `pytest.ini`, `ruff.toml`.
-2. Na **końcu** `backend/config/settings.py` wklej zawartość `config/settings_patch.py`
-   (apps, PostgreSQL z env, Redis/Channels, DRF, Keycloak). Plik `settings_patch.py` potem usuń.
-3. Dopisz zależności z `requirements-additions.txt` do `requirements.txt`.
-4. W korzeniu repo podmień `docker-compose.yml`, dodaj `keycloak/`, `.env.example` → `.env`, `.github/workflows/ci.yml`.
+## Uruchomienie
 
-Start: `docker compose up --build` →  API `http://localhost:8000/api/docs/` (Swagger), Keycloak `http://localhost:8080` (admin/admin).
+W katalogu głównym repozytorium uzupełnij lokalny `.env` i uruchom `docker compose up --build`. API będzie dostępne
+pod `http://localhost:8000/api/docs/` (Swagger), a Keycloak pod `http://localhost:8080`.
 Użytkownicy testowi w realmie `shopping`: **alice / alice123**, **bob / bob123**.
 
 Token do testów w Swaggerze/curl (client publiczny ma włączony password grant tylko na dev):
@@ -55,8 +50,39 @@ Rejestracja/logowanie: Authorization Code + PKCE w Keycloaku (np. biblioteka App
 Redirect URI: `com.example.shoppinglist:/oauth2redirect` (zmień w `keycloak/shopping-realm.json` na prawdziwy package).
 Emulator Androida widzi komputer jako `10.0.2.2` → ustaw `KEYCLOAK_PUBLIC_URL=http://10.0.2.2:8080`.
 
-## Testy i jakość
-`cd backend && pytest --cov=accounts --cov=shopping` → 205 testów, pokrycie ~99 % (jednostkowe: serwisy rezerwacji,
-walidacja, JWT; integracyjne: API + WebSocket + baza + zewnętrzne API z mockiem). Lint: `ruff check .`, security: `bandit -r accounts shopping -ll`.
-CI (`.github/workflows/ci.yml`): build → migracje na PostgreSQL → testy → ruff + bandit → deploy SSH (tylko `main`).
-Sekrety do deployu: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`.
+## Testy i GitHub Actions
+
+Backend korzysta z Pytest + pytest-django; testy API i WebSocket używają bazy testowej SQLite oraz mocków, więc nie
+wymagają uruchomionego PostgreSQL, Redis ani Keycloaka:
+
+```powershell
+cd backend
+python -m pytest -q
+```
+
+Android używa lokalnych testów JUnit uruchamianych przez Gradle:
+
+```powershell
+cd mobileApp
+.\gradlew.bat testDebugUnitTest
+```
+
+Workflow `.github/workflows/ci.yml` uruchamia oba zestawy testów na push i pull request. Deploy na lokalny komputer
+uruchamia się wyłącznie po pushu na `main` i po przejściu testów.
+
+## Deploy na własny komputer z Dockerem
+
+Ponieważ komputer lokalny zwykle nie jest osiągalny z GitHub-hosted runnera, deploy korzysta z self-hosted runnera:
+
+1. W repozytorium GitHub otwórz **Settings → Actions → Runners → New self-hosted runner** i zainstaluj runner
+   na komputerze z Docker Desktop. Workflow oczekuje domyślnych etykiet `self-hosted` i `windows`.
+2. Docker Desktop musi działać, a konto uruchamiające runnera musi mieć dostęp do polecenia `docker`.
+3. W **Settings → Secrets and variables → Actions** dodaj sekret `TUIM_ENV_FILE` z pełną zawartością produkcyjnego
+   pliku `.env` (nie dodawaj tego pliku do repozytorium). Ustaw `ALLOWED_HOSTS` oraz `KEYCLOAK_PUBLIC_URL` na adresy
+   osiągalne z urządzeń klienckich, zamiast pozostawiać `localhost`.
+4. Po mergu na `main`, gdy testy przejdą, runner wykona `docker compose up --build --detach`. Kontenery i wolumen
+   `postgres_data` pozostają na komputerze, więc dane bazy przetrwają kolejne wdrożenia.
+
+Self-hosted runner wykonuje kod z repozytorium z uprawnieniami konta Windows, więc nie uruchamiaj go dla
+niezaufanych workflow ani nie dopuszczaj niezweryfikowanych zmian na `main`. Dla serwera dostępnego publicznie
+bezpieczniejszym i stabilniejszym wariantem jest odrębny serwer Linux i deploy przez SSH.
