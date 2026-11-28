@@ -58,7 +58,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Deploy with Docker Compose
-        shell: pwsh
+        shell: powershell
         env:
           TUIM_ENV_FILE: ${{ secrets.TUIM_ENV_FILE }}
         run: |
